@@ -1,0 +1,66 @@
+name: Trivy Image scan
+run-name: Scan ${{ github.event.inputs.Image_URI }}
+on:
+    workflow_dispatch:
+        inputs:
+            Image_URI:
+                description: 'Image_URI example: 
+                  In case of AWS: <AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/<APP_NAME>:<TAG>
+                  In case of DockerHub: <APP_NAME>:<TAG>'
+                type: string
+                required: true
+
+jobs:
+    trivy-scan:
+        runs-on: ubuntu-22.04
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            
+            # In case of AWS, we need to configure AWS Credentials
+            - name: Configure AWS Credentials
+              if: contains(github.event.inputs.Image_URI, 'amazonaws')
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                aws-region: eu-west-1
+
+            - name: Extract and replace slashes in Image URI
+              id: image-uri-no-tag
+              run: |
+                full_image_uri="${{ github.event.inputs.Image_URI }}"
+                # Extract until just before the last colon (removing the tag after ':')
+                image_uri_base=$(echo "$full_image_uri" | sed 's/\(.*\):.*/\1/')
+                # Replace all '/' with '-'
+                formatted_image_uri=$(echo "$image_uri_base" | sed 's/\//-/g')
+                echo "formatted_image_uri=$formatted_image_uri" >> $GITHUB_ENV
+
+            - name: Run Trivy vulnerability scanner
+              uses: FathAllaTechOps/trivy-scan/trivy-scan-action@main
+              with:
+                image-ref: ${{ github.event.inputs.Image_URI }}
+                output: '${{ env.formatted_image_uri }}.json'
+                format: json
+                timeout: 3600s
+                ignore-unfixed: true
+                severity: 'MEDIUM,CRITICAL,HIGH'
+              env:
+                TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
+                TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1
+                AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                AWS_DEFAULT_REGION: eu-west-1
+
+            - name: json to html
+              run: |
+                export HTML=${{ env.formatted_image_uri }}
+                pip install beautifulsoup4 pandas
+                python3 ./trivy_report/json_to_html.py
+
+            - name: Upload Trivy scan results
+              uses: actions/upload-artifact@v4
+              with:
+                name: 'report-${{ env.formatted_image_uri }}'
+                path: '${{ env.formatted_image_uri }}.html'
+                retention-days: 2
