@@ -5,7 +5,7 @@ on:
         inputs:
             Image_URI:
                 description: 'Image_URI example: 
-                  In case of AWS: <AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/<APP_NAME>:<TAG>
+                  In case of AWS: <AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/<APP_NAME>:<TAG> , 
                   In case of DockerHub: <APP_NAME>:<TAG>'
                 type: string
                 required: true
